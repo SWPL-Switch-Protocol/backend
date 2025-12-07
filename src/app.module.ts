@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { GreenfieldModule } from './greenfield/greenfield.module';
+import { DidModule } from './did/did.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { GreenfieldModule } from './greenfield/greenfield.module';
     }),
     HealthModule,
     GreenfieldModule,
+    DidModule,
   ],
   controllers: [AppController],
   providers: [AppService],
