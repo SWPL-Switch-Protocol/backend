@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit, ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Client, PermissionTypes, VisibilityType, RedundancyType } from '@bnb-chain/greenfield-js-sdk';
-import { ReedSolomon } from '@bnb-chain/reed-solomon'; // npm install @bnb-chain/reed-solomon 필요
+import { Client, PermissionTypes, VisibilityType, RedundancyType, bytesFromBase64 } from '@bnb-chain/greenfield-js-sdk';
+import { NodeAdapterReedSolomon } from '@bnb-chain/reed-solomon/node.adapter';
 import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { bscGreenfield } from 'viem/chains'; // viem 체인 설정 (없으면 custom chain 설정 필요)
@@ -72,7 +72,7 @@ export class GreenfieldService implements OnModuleInit {
       if (
         error.message &&
         (error.message.includes('Bucket already exists') ||
-         error.message.includes('bucket already exists'))
+          error.message.includes('bucket already exists'))
       ) {
         throw new ConflictException(`Bucket '${bucketName}' already exists.`);
       }
@@ -84,17 +84,15 @@ export class GreenfieldService implements OnModuleInit {
   // 파일 업로드
   async uploadFile(bucketName: string, objectName: string, fileBuffer: Buffer, mimetype: string) {
     const creator = this.account.address;
+    const privKey = this.configService.get<string>('GREENFIELD_PRIV_KEY');
     console.log(`uploadFile to ${bucketName}/${objectName}, creator: ${creator}`);
-    // 0. 체크섬 계산 (Reed-Solomon)
-    const rs = new ReedSolomon();
-    const checksumBytes = await rs.encode(Uint8Array.from(fileBuffer));
-    // SDK는 expectChecksums 필드에 Uint8Array[]를 기대할 수 있음 (내부적으로 변환)
-    const checksums = checksumBytes;
 
-    console.log('Checksums generated:', checksums.length);
-    checksums.forEach(checksum => {
-      console.log(Buffer.from(checksum).toString('hex'));
-    });
+    // 0. 체크섬 계산 (Reed-Solomon) - NodeAdapter 사용
+    const rs = new NodeAdapterReedSolomon();
+    // encodeInWorker 대신 encodeInSubWorker 사용 (라이브러리 내부 워커 사용)
+    const expectCheckSums = await rs.encodeInSubWorker(Uint8Array.from(fileBuffer));
+
+    console.log('Checksums generated:', expectCheckSums.length);
 
     // 1. 오브젝트 생성 트랜잭션
     const createObjectTx = await this.client.object.createObject({
@@ -105,23 +103,33 @@ export class GreenfieldService implements OnModuleInit {
       contentType: mimetype,
       redundancyType: RedundancyType.REDUNDANCY_EC_TYPE,
       payloadSize: Long.fromInt(fileBuffer.length),
-      expectChecksums: checksums, // 계산된 체크섬 전달 (string[])
+      expectChecksums: expectCheckSums.map((x: string) => bytesFromBase64(x)),
     });
 
-    // 시뮬레이션 및 브로드캐스트 (오브젝트 메타데이터 생성)
-    const simulateInfo = await createObjectTx.simulate({ denom: 'BNB' });
-    const createRes = await createObjectTx.broadcast({
-      denom: 'BNB',
-      gasLimit: Number(simulateInfo?.gasLimit),
-      gasPrice: simulateInfo?.gasPrice || '5000000000',
-      payer: creator,
-      granter: '',
-      privateKey: this.configService.get<string>('GREENFIELD_PRIV_KEY'),
-    });
+    let createRes;
+    try {
+      // 시뮬레이션 및 브로드캐스트 (오브젝트 메타데이터 생성)
+      const simulateInfo = await createObjectTx.simulate({ denom: 'BNB' });
+      createRes = await createObjectTx.broadcast({
+        denom: 'BNB',
+        gasLimit: Number(simulateInfo?.gasLimit),
+        gasPrice: simulateInfo?.gasPrice || '5000000000',
+        payer: creator,
+        granter: '',
+        privateKey: this.configService.get<string>('GREENFIELD_PRIV_KEY'),
+      });
 
-    if (createRes.code !== 0) {
-      throw new Error(`Create Object Failed: ${createRes.message}`);
+      if (createRes.code !== 0) {
+        throw new Error(`Create Object Failed: ${createRes.message}`);
+      }
+    } catch (error: any) {
+      if (error.message && error.message.includes('Object already exists')) {
+        throw new ConflictException(`Object '${objectName}' already exists in bucket '${bucketName}'.`);
+      }
+      throw error;
     }
+
+    console.log('Create Object Success, txnHash:', createRes.transactionHash);
 
     // 2. 실제 파일 데이터 업로드 (SP로 전송)
     const uploadRes = await this.client.object.uploadObject(
@@ -133,7 +141,7 @@ export class GreenfieldService implements OnModuleInit {
       },
       // 인증 정보 (V2 SDK에서는 authType 등 옵션 확인 필요)
       {
-        type: 'EDDSA', // or ECDSA depending on key type
+        type: 'ECDSA', // or ECDSA depending on key type
         address: creator,
         domain: 'http://localhost', // Node.js 환경용 더미 도메인
         seed: createRes.transactionHash, // 임시 시드
@@ -152,13 +160,13 @@ export class GreenfieldService implements OnModuleInit {
     const sp = await this.getPrimarySp();
     // 예: https://gnfd-testnet-sp1.bnbchain.org/view/{bucket}/{object}
     // 정확한 SP 엔드포인트 매핑이 필요함. 여기서는 예시 리턴.
-    return `https://${bucketName}.${sp.replace('https://', '')}/${objectName}`; 
+    return `https://${bucketName}.${sp.replace('https://', '')}/${objectName}`;
   }
 
   // 권한 부여
   async grantPermission(bucketName: string, objectName: string | undefined, grantee: string, action: string) {
     const operator = this.account.address;
-    
+
     // 액션 타입 매핑 (문자열 -> SDK Enum)
     // 예: PermissionTypes.ActionType.ACTION_UPDATE_OBJECT_INFO
     // 여기서는 사용자가 문자열로 넘긴다고 가정 (GRN_...)
