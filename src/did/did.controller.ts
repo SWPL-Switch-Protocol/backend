@@ -1,14 +1,48 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiProperty } from '@nestjs/swagger';
 import { DidService } from './did.service';
 import { CreateDidDto } from './dto/create-did.dto';
 import { VerifyDidDto } from './dto/verify-did.dto';
 import { SignDidDto } from './dto/sign-did.dto';
 
+class IssueVcDto {
+  @ApiProperty({ description: 'DID of the Holder (Receiver)', example: 'did:bnb:0x...' })
+  holderDid: string;
+
+  @ApiProperty({ 
+    description: 'VC Content (Claims)', 
+    example: { age: 25, location: 'Brooklyn' } 
+  })
+  credentialSubject: Record<string, any>;
+}
+
 @ApiTags('did')
 @Controller('did')
 export class DidController {
   constructor(private readonly didService: DidService) {}
+
+  // ... existing endpoints ...
+
+  @Post('issue-vc')
+  @ApiOperation({ summary: 'Issue Verifiable Credential (VC)' })
+  @ApiOkResponse({
+    description: 'Returns the signed VC and storage URL',
+    schema: {
+      example: {
+        success: true,
+        vc: {
+          '@context': ['...'],
+          issuer: 'did:bnb:0xIssuer...',
+          proof: { jws: '0x...' }
+        },
+        storageUrl: 'https://...',
+      },
+    },
+  })
+  async issueVC(@Body() dto: IssueVcDto) {
+    return this.didService.issueVC(dto.holderDid, dto.credentialSubject);
+  }
+
 
   @Post('create')
   @ApiOperation({ summary: 'Create DID Document' })

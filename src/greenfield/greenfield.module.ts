@@ -5,5 +5,6 @@ import { GreenfieldService } from './greenfield.service';
 @Module({
   controllers: [GreenfieldController],
   providers: [GreenfieldService],
+  exports: [GreenfieldService],
 })
 export class GreenfieldModule {}

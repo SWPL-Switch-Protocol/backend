@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
 import * as BNBDIDRegistryABI from './abi/BNBDIDRegistry.json';
+import { GreenfieldService } from '../greenfield/greenfield.service';
 
 @Injectable()
 export class DidService {
@@ -10,20 +11,105 @@ export class DidService {
   private provider: ethers.JsonRpcProvider;
   private wallet: ethers.Wallet;
   private contract: ethers.Contract;
+  private issuerWallet: ethers.Wallet;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private greenfieldService: GreenfieldService,
+  ) {
     const rpcUrl = this.configService.get<string>('TESTNET_RPC_URL');
     const testnetPrivKey = this.configService.get<string>('TESTNET_PRIV_KEY'); // 혹은 DID_PRIVATE_KEY
     const registryAddress = this.configService.get<string>('TESTNET_DID_REGISTRY');
+    const issuerPrivKey = this.configService.get<string>('ISSUER_PRIV_KEY');
 
-    if (rpcUrl && testnetPrivKey && registryAddress) {
+    if (rpcUrl) {
       this.provider = new ethers.JsonRpcProvider(rpcUrl);
-      this.wallet = new ethers.Wallet(testnetPrivKey, this.provider);
-      this.contract = new ethers.Contract(
-        registryAddress,
-        (BNBDIDRegistryABI as any).default || BNBDIDRegistryABI,
-        this.wallet,
-      );
+      
+      if (testnetPrivKey && registryAddress) {
+        this.wallet = new ethers.Wallet(testnetPrivKey, this.provider);
+        this.contract = new ethers.Contract(
+          registryAddress,
+          (BNBDIDRegistryABI as any).default || BNBDIDRegistryABI,
+          this.wallet,
+        );
+      }
+
+      if (issuerPrivKey) {
+        this.issuerWallet = new ethers.Wallet(issuerPrivKey, this.provider);
+      }
+    }
+  }
+
+  // ... createDID, verifyDID, signDidMessage ...
+
+  /**
+   * Issuer가 VC(Verifiable Credential)를 발급합니다.
+   * 1. VC 데이터 생성
+   * 2. Issuer 서명 (Proof) 추가
+   * 3. Greenfield에 VC JSON 업로드 (vc-bucket)
+   */
+  async issueVC(holderDid: string, credentialSubject: any) {
+    try {
+      if (!this.issuerWallet) {
+        throw new Error('Issuer wallet not configured');
+      }
+
+      const issuerDid = `${this.didPrefix}${this.issuerWallet.address.toLowerCase()}`;
+      const issuanceDate = new Date().toISOString();
+      const expirationDate = new Date();
+      expirationDate.setFullYear(expirationDate.getFullYear() + 1); // 1년 유효
+
+      // 1. VC 데이터 구조 (Unsigned)
+      const vcPayload = {
+        '@context': [
+          'https://www.w3.org/2018/credentials/v1',
+          // 추가적인 컨텍스트가 필요하면 여기에 추가
+        ],
+        id: `http://example.com/credentials/${Date.now()}`, // 고유 VC ID
+        type: ['VerifiableCredential', 'IdentityCredential'], // 예시 타입 수정
+        issuer: issuerDid,
+        issuanceDate: issuanceDate,
+        expirationDate: expirationDate.toISOString(),
+        credentialSubject: {
+          id: holderDid,
+          ...credentialSubject, // 예: { age: 25, location: "Brooklyn" }
+        },
+      };
+
+      // 2. Issuer 서명 생성 (간소화된 EcdsaSecp256k1Signature2019 방식)
+      // 실제로는 JSON-LD 정규화(canonicalize) 후 서명해야 하지만, 여기서는 JSON.stringify 후 해시 서명
+      const vcString = JSON.stringify(vcPayload);
+      const signature = await this.issuerWallet.signMessage(vcString);
+
+      const signedVC = {
+        ...vcPayload,
+        proof: {
+          type: 'EcdsaSecp256k1Signature2019',
+          created: issuanceDate,
+          proofPurpose: 'assertionMethod',
+          verificationMethod: `${issuerDid}#key-1`,
+          jws: signature, // 혹은 signatureValue 등 표준에 따라 다름
+        },
+      };
+
+      // 3. Greenfield에 업로드
+      const bucketName = 'vc-bucket';
+      const objectName = `vc_${holderDid.replace(/:/g, '_')}_${Date.now()}.json`;
+      
+      // GreenfieldService를 사용하여 업로드
+      await this.greenfieldService.uploadJson(bucketName, objectName, signedVC);
+      
+      const publicUrl = await this.greenfieldService.getDownloadUrl(bucketName, objectName);
+
+      return {
+        success: true,
+        vc: signedVC,
+        storageUrl: publicUrl,
+      };
+
+    } catch (error) {
+      console.error('VC Issuance Error:', error);
+      throw new BadRequestException(`Failed to issue VC: ${error.message}`);
     }
   }
 
