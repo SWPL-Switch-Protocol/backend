@@ -44,6 +44,12 @@
         "internalType": "string",
         "name": "document",
         "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "documentHash",
+        "type": "bytes32"
       }
     ],
     "name": "DIDCreated",
@@ -113,6 +119,12 @@
         "internalType": "string",
         "name": "document",
         "type": "string"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "documentHash",
+        "type": "bytes32"
       }
     ],
     "name": "DIDUpdated",
@@ -176,6 +188,11 @@
         "internalType": "string",
         "name": "document",
         "type": "string"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "documentHash",
+        "type": "bytes32"
       }
     ],
     "name": "registerDID",
@@ -197,6 +214,11 @@
         "internalType": "string",
         "name": "document",
         "type": "string"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "documentHash",
+        "type": "bytes32"
       },
       {
         "internalType": "bool",

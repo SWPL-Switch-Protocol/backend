@@ -1,10 +1,31 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
+import * as BNBDIDRegistryABI from './abi/BNBDIDRegistry.json';
 
 @Injectable()
 export class DidService {
   private readonly didPrefix = 'did:bnb:';
   private readonly verificationTimeout = 24 * 60 * 60 * 1000;
+  private provider: ethers.JsonRpcProvider;
+  private wallet: ethers.Wallet;
+  private contract: ethers.Contract;
+
+  constructor(private configService: ConfigService) {
+    const rpcUrl = this.configService.get<string>('TESTNET_RPC_URL');
+    const testnetPrivKey = this.configService.get<string>('TESTNET_PRIV_KEY'); // 혹은 DID_PRIVATE_KEY
+    const registryAddress = this.configService.get<string>('TESTNET_DID_REGISTRY');
+
+    if (rpcUrl && testnetPrivKey && registryAddress) {
+      this.provider = new ethers.JsonRpcProvider(rpcUrl);
+      this.wallet = new ethers.Wallet(testnetPrivKey, this.provider);
+      this.contract = new ethers.Contract(
+        registryAddress,
+        (BNBDIDRegistryABI as any).default || BNBDIDRegistryABI,
+        this.wallet,
+      );
+    }
+  }
 
   async createDID(walletAddress: string, profileData: any = {}) {
     try {
@@ -46,10 +67,33 @@ export class DidService {
         },
       };
 
+      const didHash = this.generateDIDHash(didDocument);
+
+      // Blockchain에 기록 (registerDID)
+      if (this.contract) {
+        try {
+          // JSON.stringify시 키 정렬 등을 통해 일관된 문자열 생성
+          const documentString = JSON.stringify(didDocument, Object.keys(didDocument).sort());
+          
+          // ethers.id(documentString)은 keccak256(toUtf8Bytes(documentString))과 동일 (Solidity keccak256(bytes(document))와 일치)
+          const documentHashBytes32 = ethers.id(documentString);
+
+          console.log(`Registering DID on-chain... Addr: ${normalizedAddress}`);
+          const tx = await this.contract.registerDID(documentString, documentHashBytes32);
+          console.log(`Transaction sent: ${tx.hash}`);
+          await tx.wait(); // 트랜잭션 마이닝 대기
+          console.log(`DID Registered successfully on-chain.`);
+        } catch (chainError) {
+          console.error('Failed to register DID on-chain:', chainError);
+          // 온체인 실패 시 전체 실패로 처리할지, 오프체인 생성만 반환할지 결정 필요
+          // 여기서는 에러 로그만 남기고 진행 (혹은 throw하여 중단 가능)
+        }
+      }
+
       return {
         success: true,
         didDocument,
-        didHash: this.generateDIDHash(didDocument),
+        didHash: didHash,
       };
     } catch (error) {
       console.error('DID creation error:', error);
