@@ -11,16 +11,15 @@ export class DidController {
   constructor(private readonly didService: DidService) {}
 
   @Post('create')
-  @ApiOperation({ summary: 'DID 문서 생성' })
+  @ApiOperation({ summary: 'Create DID Document' })
   @ApiOkResponse({
-    description: '생성된 DID 문서 반환',
+    description: 'Returns the created DID document',
     schema: {
       example: {
         success: true,
         didDocument: {
           '@context': ['...'],
           id: 'did:bnb:0x...',
-          // ...
         },
         didHash: 'abcdef...',
       },
@@ -32,9 +31,9 @@ export class DidController {
 
   @Post('verify')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'DID 문서 및 서명 검증' })
+  @ApiOperation({ summary: 'Verify DID Document and Signature' })
   @ApiOkResponse({
-    description: '검증 결과',
+    description: 'Verification Result',
     schema: {
       example: {
         success: true,
@@ -53,9 +52,9 @@ export class DidController {
 
   @Post('sign-test')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '테스트용: PrivateKey로 서명 생성 (DEV ONLY)' })
+  @ApiOperation({ summary: 'Test: Generate Signature with PrivateKey (DEV ONLY)' })
   @ApiOkResponse({
-    description: '서명값 반환',
+    description: 'Returns the signature',
     schema: {
       example: {
         walletAddress: '0x...',

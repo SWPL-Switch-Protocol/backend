@@ -4,17 +4,13 @@ import { ethers } from 'ethers';
 @Injectable()
 export class DidService {
   private readonly didPrefix = 'did:bnb:';
-  private readonly verificationTimeout = 24 * 60 * 60 * 1000; // 24 hours
+  private readonly verificationTimeout = 24 * 60 * 60 * 1000;
 
-  /**
-   * DID 문서 생성
-   */
   async createDID(walletAddress: string, profileData: any = {}) {
     try {
       const normalizedAddress = ethers.getAddress(walletAddress);
       const didId = `${this.didPrefix}${normalizedAddress.toLowerCase()}`;
 
-      // 공개키 파생 (간소화된 방식: 주소 해시를 사용)
       const publicKey = await this.derivePublicKeyFromAddress(normalizedAddress);
 
       const didDocument = {
@@ -61,9 +57,6 @@ export class DidService {
     }
   }
 
-  /**
-   * DID 검증 (문서 구조, 서명, 소유권)
-   */
   async verifyDID(walletAddress: string, didDocument: any, signature: string) {
     try {
       if (!walletAddress || !didDocument || !signature) {
@@ -72,7 +65,6 @@ export class DidService {
 
       const normalizedAddress = ethers.getAddress(walletAddress);
 
-      // 1. 문서 구조 검증
       const docValidation = this.validateDIDDocument(
         didDocument,
         normalizedAddress,
@@ -85,7 +77,6 @@ export class DidService {
         };
       }
 
-      // 2. 지갑 소유권 검증 (서명 확인)
       const ownershipValidation = await this.verifyWalletOwnership(
         normalizedAddress,
         didDocument,
@@ -99,7 +90,6 @@ export class DidService {
         };
       }
 
-      // 3. 진위 여부 (Authenticity) - 생성 시간 등
       const authValidation = await this.verifyDIDAuthenticity(didDocument);
       if (!authValidation.isValid) {
         return {
@@ -126,10 +116,6 @@ export class DidService {
     }
   }
 
-  /**
-   * (테스트용) DID ID에 대한 서명 생성
-   * 주의: 테스트 목적으로만 사용해야 합니다.
-   */
   async signDidMessage(privateKey: string, didId: string) {
     try {
       const wallet = new ethers.Wallet(privateKey);
@@ -146,8 +132,6 @@ export class DidService {
       throw new BadRequestException(`Failed to sign message: ${error.message}`);
     }
   }
-
-  // --- 내부 헬퍼 메서드 ---
 
   private validateDIDDocument(didDocument: any, expectedAddress: string) {
     try {
@@ -195,10 +179,8 @@ export class DidService {
     signature: string,
   ) {
     try {
-      // 메시지 원문: DID 문서를 생성한 주체가 맞는지 확인하기 위한 챌린지 메시지
       const message = `Verify ownership of ${didDocument.id}`;
 
-      // 서명 복원
       const recoveredAddress = ethers.verifyMessage(message, signature);
 
       if (recoveredAddress.toLowerCase() !== walletAddress.toLowerCase()) {
@@ -232,17 +214,15 @@ export class DidService {
   }
 
   private generateDIDHash(didDocument: any): string {
-    // 키 정렬 후 JSON 문자열화 -> SHA256 해시
     const documentString = JSON.stringify(
       didDocument,
       Object.keys(didDocument).sort(),
     );
     const hashBytes = ethers.sha256(ethers.toUtf8Bytes(documentString));
-    return hashBytes.replace('0x', ''); // hex string (without 0x prefix if needed, or keep it)
+    return hashBytes.replace('0x', '');
   }
 
   private async derivePublicKeyFromAddress(walletAddress: string) {
-    // 실제 공개키 도출 대신 주소 해시 사용 (데모용)
     const addressBytes = ethers.getBytes(walletAddress);
     const hash = ethers.sha256(addressBytes);
     return hash.replace('0x', '');

@@ -19,13 +19,13 @@ export class GreenfieldController {
   constructor(private readonly greenfieldService: GreenfieldService) {}
 
   @Post('bucket')
-  @ApiOperation({ summary: 'Greenfield 버킷 생성' })
+  @ApiOperation({ summary: 'Create Greenfield Bucket' })
   async createBucket(@Body() createBucketDto: CreateBucketDto) {
     return this.greenfieldService.createBucket(createBucketDto.bucketName);
   }
 
   @Post('object')
-  @ApiOperation({ summary: '파일 업로드' })
+  @ApiOperation({ summary: 'Upload File' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -56,7 +56,7 @@ export class GreenfieldController {
   }
 
   @Get('object')
-  @ApiOperation({ summary: '파일 다운로드 URL 조회' })
+  @ApiOperation({ summary: 'Get File Download URL' })
   async getDownloadUrl(
     @Query('bucketName') bucketName: string,
     @Query('objectName') objectName: string,
@@ -69,7 +69,7 @@ export class GreenfieldController {
   }
 
   @Post('permission')
-  @ApiOperation({ summary: '버킷/오브젝트 권한 부여' })
+  @ApiOperation({ summary: 'Grant Bucket/Object Permissions' })
   async grantPermission(@Body() dto: GrantPermissionDto) {
     return this.greenfieldService.grantPermission(
       dto.bucketName,

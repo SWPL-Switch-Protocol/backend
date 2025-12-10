@@ -8,9 +8,9 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  @ApiOperation({ summary: 'hello' })
+  @ApiOperation({ summary: 'Hello World endpoint' })
   @ApiOkResponse({
-    description: 'hello',
+    description: 'Returns Hello World response',
     schema: {
       example: {
         res: 'Hello World!',
