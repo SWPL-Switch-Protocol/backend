@@ -133,6 +133,12 @@ export class GreenfieldService implements OnModuleInit {
     return uploadRes;
   }
 
+  async uploadJson(bucketName: string, objectName: string, jsonData: Record<string, any>) {
+    const jsonString = JSON.stringify(jsonData);
+    const buffer = Buffer.from(jsonString);
+    return this.uploadFile(bucketName, objectName, buffer, 'application/json');
+  }
+
   async getDownloadUrl(bucketName: string, objectName: string) {
     const sp = await this.getPrimarySp();
     return `https://${bucketName}.${sp.replace('https://', '')}/${objectName}`;

@@ -55,6 +55,26 @@ export class GreenfieldController {
     );
   }
 
+  @Post('object/metadata')
+  @ApiOperation({ summary: 'Upload Meta Data' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        bucketName: { type: 'string', example: 'metadata-bucket' },
+        objectName: { type: 'string', example: 'SBTTransfer_metadata.json' },
+        jsonData: { type: 'object', example: { key: 'value', id: 1 } },
+      },
+    },
+  })
+  async uploadJson(
+    @Body('bucketName') bucketName: string,
+    @Body('objectName') objectName: string,
+    @Body('jsonData') jsonData: Record<string, any>,
+  ) {
+    return this.greenfieldService.uploadJson(bucketName, objectName, jsonData);
+  }
+
   @Get('object')
   @ApiOperation({ summary: 'Get File Download URL' })
   async getDownloadUrl(
