@@ -5,6 +5,25 @@ import { CreateDidDto } from './dto/create-did.dto';
 import { VerifyDidDto } from './dto/verify-did.dto';
 import { SignDidDto } from './dto/sign-did.dto';
 
+class CreateVpDto {
+  @ApiProperty({ description: 'Holder Private Key', example: '0x...' })
+  holderPrivateKey: string;
+
+  @ApiProperty({ 
+    description: 'List of VCs to include', 
+    example: [{ "@context": ["..."], "issuer": "...", "proof": { } }] 
+  })
+  vcList: any[];
+}
+
+class VerifyVpDto {
+  @ApiProperty({ 
+    description: 'Verifiable Presentation (VP) Object', 
+    example: { "@context": ["..."], "type": ["VerifiablePresentation"], "proof": { } } 
+  })
+  vp: any;
+}
+
 class IssueVcDto {
   @ApiProperty({ description: 'DID of the Holder (Receiver)', example: 'did:bnb:0x...' })
   holderDid: string;
@@ -41,6 +60,24 @@ export class DidController {
   })
   async issueVC(@Body() dto: IssueVcDto) {
     return this.didService.issueVC(dto.holderDid, dto.credentialSubject);
+  }
+
+  @Post('create-vp')
+  @ApiOperation({ summary: 'Create Verifiable Presentation (VP)' })
+  @ApiOkResponse({
+    description: 'Returns the signed VP',
+  })
+  async createVP(@Body() dto: CreateVpDto) {
+    return this.didService.createVP(dto.holderPrivateKey, dto.vcList);
+  }
+
+  @Post('verify-vp')
+  @ApiOperation({ summary: 'Verify Verifiable Presentation (VP)' })
+  @ApiOkResponse({
+    description: 'Verification result',
+  })
+  async verifyVP(@Body() dto: VerifyVpDto) {
+    return this.didService.verifyVP(dto.vp);
   }
 
 

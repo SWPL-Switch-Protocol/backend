@@ -113,6 +113,134 @@ export class DidService {
     }
   }
 
+  /**
+   * Holder가 VP(Verifiable Presentation)를 생성합니다.
+   * 1. 보유한 VC 포함
+   * 2. Holder 서명 (Proof) 추가
+   */
+  async createVP(holderPrivateKey: string, vcList: any[]) {
+    try {
+      const holderWallet = new ethers.Wallet(holderPrivateKey);
+      const holderDid = `${this.didPrefix}${holderWallet.address.toLowerCase()}`;
+
+      // VP 구조 생성
+      const vpPayload = {
+        '@context': ['https://www.w3.org/2018/credentials/v1'],
+        type: ['VerifiablePresentation'],
+        verifiableCredential: vcList,
+        holder: holderDid, // VP 제출자
+      };
+
+      // VP 서명 (Holder가 서명)
+      const vpString = JSON.stringify(vpPayload);
+      const signature = await holderWallet.signMessage(vpString);
+
+      const signedVP = {
+        ...vpPayload,
+        proof: {
+          type: 'EcdsaSecp256k1Signature2019',
+          created: new Date().toISOString(),
+          proofPurpose: 'authentication',
+          verificationMethod: `${holderDid}#key-1`,
+          jws: signature,
+        },
+      };
+
+      // Greenfield에 VP 업로드
+      const bucketName = 'vp-bucket';
+      const objectName = `vp_${holderDid.replace(/:/g, '_')}_${Date.now()}.json`;
+      
+      await this.greenfieldService.uploadJson(bucketName, objectName, signedVP);
+      const publicUrl = await this.greenfieldService.getDownloadUrl(bucketName, objectName);
+
+      return {
+        success: true,
+        vp: signedVP,
+        storageUrl: publicUrl,
+      };
+    } catch (error) {
+      console.error('VP Creation Error:', error);
+      throw new BadRequestException(`Failed to create VP: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verifier가 VP를 검증합니다.
+   * 1. VP 서명 검증 (Holder 확인)
+   * 2. 포함된 VC들의 서명 검증 (Issuer 확인)
+   * 3. (옵션) VC의 내용(Claims) 검증
+   */
+  async verifyVP(vp: any) {
+    try {
+      // 1. VP 구조 확인
+      if (!vp.proof || !vp.holder || !Array.isArray(vp.verifiableCredential)) {
+        throw new Error('Invalid VP structure');
+      }
+
+      // 2. VP 서명 검증 (Holder가 제출한 것인지)
+      const vpPayload = { ...vp };
+      delete vpPayload.proof; // 서명 제외한 원본 데이터
+      const vpString = JSON.stringify(vpPayload);
+      
+      const recoveredHolderAddress = ethers.verifyMessage(vpString, vp.proof.jws);
+      const expectedHolderAddress = vp.holder.replace(this.didPrefix, '');
+
+      if (recoveredHolderAddress.toLowerCase() !== expectedHolderAddress.toLowerCase()) {
+        throw new Error('VP Signature verification failed: Holder mismatch');
+      }
+
+      // 3. 내부 VC들 검증
+      const vcVerificationResults: { id: string; valid: boolean; error?: string }[] = [];
+      for (const vc of vp.verifiableCredential) {
+        try {
+          const isValidVC = await this.verifySingleVC(vc);
+          vcVerificationResults.push({ id: vc.id, valid: isValidVC });
+        } catch (e) {
+          vcVerificationResults.push({ id: vc.id, valid: false, error: e.message });
+        }
+      }
+
+      const allValid = vcVerificationResults.every((r) => r.valid);
+
+      return {
+        success: allValid,
+        vpVerified: true,
+        vcResults: vcVerificationResults,
+      };
+
+    } catch (error) {
+      console.error('VP Verification Error:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  private async verifySingleVC(vc: any): Promise<boolean> {
+    // VC 서명 검증 (Issuer 확인)
+    const vcPayload = { ...vc };
+    delete vcPayload.proof;
+    const vcString = JSON.stringify(vcPayload);
+
+    // Issuer의 공개키/주소 복원
+    // 실제로는 Issuer DID Document를 resolve해서 공개키를 가져와야 정석이지만,
+    // 여기서는 서명에서 주소를 복원하여 Issuer DID와 일치하는지 확인 (간소화)
+    const recoveredIssuerAddress = ethers.verifyMessage(vcString, vc.proof.jws);
+    const expectedIssuerAddress = vc.issuer.replace(this.didPrefix, '');
+
+    if (recoveredIssuerAddress.toLowerCase() !== expectedIssuerAddress.toLowerCase()) {
+      throw new Error(`VC Signature mismatch for ${vc.id}`);
+    }
+
+    // (옵션) 만료일 확인
+    if (vc.expirationDate && new Date(vc.expirationDate) < new Date()) {
+      throw new Error(`VC expired: ${vc.id}`);
+    }
+
+    return true;
+  }
+
   async createDID(walletAddress: string, profileData: any = {}) {
     try {
       const normalizedAddress = ethers.getAddress(walletAddress);
