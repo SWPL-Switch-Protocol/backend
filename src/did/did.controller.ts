@@ -63,7 +63,7 @@ export class DidController {
   }
 
   @Post('create-vp')
-  @ApiOperation({ summary: 'Create Verifiable Presentation (VP)' })
+  @ApiOperation({ summary: `Create Verifiable Presentation (VP)  (It's just for demo - DEV ONLY*)` })
   @ApiOkResponse({
     description: 'Returns the signed VP',
   })
@@ -123,7 +123,7 @@ export class DidController {
 
   @Post('sign-test')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Test: Generate Signature with PrivateKey (DEV ONLY)' })
+  @ApiOperation({ summary: 'Test: Generate Signature with PrivateKey (DEV ONLY*)' })
   @ApiOkResponse({
     description: 'Returns the signature',
     schema: {
