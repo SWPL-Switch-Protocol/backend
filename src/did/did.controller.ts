@@ -100,7 +100,7 @@ export class DidController {
     return this.didService.createDID(dto.walletAddress, dto.profileData);
   }
 
-  @Post('verify')
+  @Post('verify-did')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify DID Document and Signature' })
   @ApiOkResponse({
