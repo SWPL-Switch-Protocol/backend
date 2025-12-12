@@ -284,6 +284,7 @@ export class DidService {
       const didHash = this.generateDIDHash(didDocument);
 
       // Blockchain에 기록 (registerDID)
+      let txHash = '';
       if (this.contract) {
         try {
           // JSON.stringify시 키 정렬 등을 통해 일관된 문자열 생성
@@ -295,6 +296,7 @@ export class DidService {
           console.log(`Registering DID on-chain... Addr: ${normalizedAddress}`);
           const tx = await this.contract.registerDID(documentString, documentHashBytes32);
           console.log(`Transaction sent: ${tx.hash}`);
+          txHash = tx.hash;
           await tx.wait(); // 트랜잭션 마이닝 대기
           console.log(`DID Registered successfully on-chain.`);
         } catch (chainError) {
@@ -308,6 +310,7 @@ export class DidService {
         success: true,
         didDocument,
         didHash: didHash,
+        txHash: txHash,
       };
     } catch (error) {
       console.error('DID creation error:', error);

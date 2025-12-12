@@ -20,6 +20,8 @@ examples
 /coverage
 /.nyc_output
 
+src/json
+
 # IDEs and editors
 /.idea
 .project
